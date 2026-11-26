@@ -51,7 +51,7 @@ uv run uvicorn app.main:app --reload  # http://127.0.0.1:8000
 
 To run it on a server with HTTPS and the remote mode, follow
 [docs/deploy.md](docs/deploy.md) (Cloudflare Tunnel + Access, or Caddy with a
-password). The deploy guide is in Portuguese for now.
+password).
 
 ## How it protects you
 

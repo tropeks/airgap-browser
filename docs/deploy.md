@@ -1,18 +1,20 @@
-# Publicar o QP num servidor
+# Deploying airgap-browser on a server
 
-Receita para subir os três modos (isolado, renderizado e remoto) num servidor Linux
-com HTTPS. Nenhuma porta do QP fica exposta na internet: tudo escuta em `127.0.0.1`,
-e quem publica é um túnel ou reverse proxy na frente.
+**English** · [Português](deploy.pt-BR.md)
+
+How to run all three modes (isolated, rendered and remote) on a Linux server with
+HTTPS. No port of the app is exposed to the internet: everything listens on
+`127.0.0.1`, and a tunnel or reverse proxy in front publishes it.
 
 ```
-navegador ──HTTPS──▶ proxy da frente (TLS + login) ──▶ 127.0.0.1:18082  app do QP
-                                    └── /remoto/* ──▶ 127.0.0.1:18085  portão do modo remoto
+browser ──HTTPS──▶ front proxy (TLS + login) ──▶ 127.0.0.1:18082  the app
+                                  └── /remoto/* ──▶ 127.0.0.1:18085  remote-mode gate
 ```
 
-Requisitos: Docker com o plugin `compose`, uns 4 GB de RAM (2 GB do app com o
-Chromium do modo renderizado, 2 GB do Chromium do modo remoto) e um domínio.
+Requirements: Docker with the `compose` plugin, about 4 GB of RAM (2 GB for the app
+with the rendered-mode Chromium, 2 GB for the remote-mode Chromium) and a domain.
 
-## 1. Clonar e configurar
+## 1. Clone and configure
 
 ```bash
 sudo git clone https://github.com/tropeks/airgap-browser /opt/qp && cd /opt/qp
@@ -20,57 +22,56 @@ sudo cp .env.example .env
 sudo $EDITOR .env
 ```
 
-No `.env`, escolha **uma** forma de login:
+In `.env`, pick **one** way to log in:
 
-- **Senha do QP:** `SAFEBROWSE_AUTH_PASSWORD=<senha longa>`. O app e o modo remoto
-  pedem usuário (`SAFEBROWSE_AUTH_USER`, padrão `qp`) e senha. Serve com qualquer
-  proxy da frente.
-- **Login no proxy da frente** (ex.: Cloudflare Access): deixe
-  `SAFEBROWSE_AUTH_PASSWORD` vazio. Só faça isso se o proxy cobrir o hostname inteiro.
+- **App password:** `SAFEBROWSE_AUTH_PASSWORD=<a long password>`. The app and the
+  remote mode ask for a username (`SAFEBROWSE_AUTH_USER`, default `qp`) and this
+  password. Works with any front proxy.
+- **Login at the front proxy** (e.g. Cloudflare Access): leave
+  `SAFEBROWSE_AUTH_PASSWORD` empty. Only do this if the proxy covers the whole hostname.
 
-Se as portas 18082 e 18085 estiverem ocupadas (`ss -ltn`), troque `QP_PORT` e
-`QP_REMOTE_PORT`.
+If ports 18082 and 18085 are taken (`ss -ltn`), change `QP_PORT` and `QP_REMOTE_PORT`.
 
-## 2. Subir no boot
+## 2. Start on boot
 
 ```bash
 sudo cp deploy/safebrowse.service /etc/systemd/system/
-# se não clonou em /opt/qp, ajuste WorkingDirectory no arquivo copiado
+# if you did not clone into /opt/qp, fix WorkingDirectory in the copied file
 sudo systemctl daemon-reload
 sudo systemctl enable --now safebrowse       # docker compose -f docker-compose.prod.yml up -d --build
 curl -fsS http://127.0.0.1:18082/healthz     # {"ok":true}
 ```
 
-O primeiro build baixa a imagem do Playwright (cerca de 2 GB) e demora alguns minutos.
+The first build downloads the Playwright image (about 2 GB) and takes a few minutes.
 
-## 3. Proxy da frente
+## 3. Front proxy
 
-O proxy precisa: terminar o HTTPS, mandar `/remoto/*` para o portão e o resto para o
-app, manter o `Host` original (o portão compara o `Origin` com ele) e repassar
-WebSocket. Duas opções testadas no desenho:
+The front proxy must terminate HTTPS, send `/remoto/*` to the gate and everything
+else to the app, keep the original `Host` header (the gate compares `Origin` with
+it) and pass WebSockets through. Two options:
 
-### Opção A: Cloudflare Tunnel + Access
+### Option A: Cloudflare Tunnel + Access
 
-Sem abrir porta no servidor nem cuidar de certificado.
+No open ports on the server and no certificates to manage.
 
-1. Instale o `cloudflared` e crie um túnel: `cloudflared tunnel login`, depois
+1. Install `cloudflared` and create a tunnel: `cloudflared tunnel login`, then
    `cloudflared tunnel create qp`.
-2. No ingress (`/etc/cloudflared/config.yml`), inclua o trecho de
-   `deploy/cloudflared-ingress.yml` com o seu hostname, antes do catch-all
+2. In the ingress config (`/etc/cloudflared/config.yml`), add the snippet from
+   `deploy/cloudflared-ingress.yml` with your hostname, before the catch-all
    `http_status:404`.
-3. DNS: `cloudflared tunnel route dns qp <seu hostname>`.
-4. Valide e reinicie:
+3. DNS: `cloudflared tunnel route dns qp <your hostname>`.
+4. Validate and restart:
    ```bash
    sudo cloudflared --config /etc/cloudflared/config.yml tunnel ingress validate
    sudo systemctl restart cloudflared
    ```
-5. Login: em Zero Trust → Access → Applications, crie um app *Self-hosted* para o
-   hostname inteiro, com uma policy *allow* para os e-mails que podem entrar.
-   Com o Access na frente, a senha do QP pode ficar vazia.
+5. Login: in Zero Trust → Access → Applications, create a *Self-hosted* app for
+   the whole hostname, with an *allow* policy for the e-mails that may sign in.
+   With Access in front, the app password can stay empty.
 
-### Opção B: Caddy com senha do QP
+### Option B: Caddy with the app password
 
-Caddy pega o certificado sozinho. Abra as portas 80 e 443 e use, no `Caddyfile`:
+Caddy gets the certificate by itself. Open ports 80 and 443 and use this `Caddyfile`:
 
 ```
 qp.example.com {
@@ -83,18 +84,18 @@ qp.example.com {
 }
 ```
 
-Aqui o login é a senha do QP: `SAFEBROWSE_AUTH_PASSWORD` precisa estar preenchido.
-Nginx ou Traefik servem do mesmo jeito, desde que repassem `Host`, `Upgrade` e
-`Connection` e mandem `X-Forwarded-For`.
+Here the login is the app password, so `SAFEBROWSE_AUTH_PASSWORD` must be set.
+Nginx or Traefik work the same way, as long as they pass `Host`, `Upgrade` and
+`Connection` through and send `X-Forwarded-For`.
 
-## 4. Conferir e operar
+## 4. Check and operate
 
 ```bash
-curl -sI https://<seu hostname>/healthz | head -1    # 200, ou 302 para o login do Access
-curl -sI https://<seu hostname>/ | head -1           # 401 com senha do QP; 302 com Access
-cd /opt/qp && sudo git pull && sudo systemctl restart safebrowse   # atualizar
+curl -sI https://<your hostname>/healthz | head -1   # 200, or 302 to the Access login
+curl -sI https://<your hostname>/ | head -1          # 401 with the app password; 302 with Access
+cd /opt/qp && sudo git pull && sudo systemctl restart safebrowse   # update
 sudo docker compose -f docker-compose.prod.yml logs -f              # logs
 ```
 
-Os estáticos já saem versionados por hash (`/static/app.js?v=<hash>`), então uma
-CDN na frente não prende a interface antiga.
+Static files are versioned by hash (`/static/app.js?v=<hash>`), so a CDN in front
+never keeps serving an old UI.

@@ -1,5 +1,5 @@
-# safebrowse.service — sobe o QP (docker compose prod) no boot do servidor.
-# Ajuste WorkingDirectory para a pasta onde você clonou o repositório.
+# safebrowse.service — starts airgap-browser (docker compose prod) when the server boots.
+# Set WorkingDirectory to the folder where you cloned the repository.
 #   sudo cp deploy/safebrowse.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now safebrowse
 # Logs: journalctl -u safebrowse -f | sudo docker compose -f docker-compose.prod.yml logs -f

@@ -40,7 +40,7 @@ uv run playwright install chromium   # só para o modo renderizado
 uv run uvicorn app.main:app --reload # http://127.0.0.1:8000
 ```
 
-Para publicar num servidor com HTTPS e o modo remoto, siga [docs/deploy.md](docs/deploy.md).
+Para publicar num servidor com HTTPS e o modo remoto, siga [docs/deploy.pt-BR.md](docs/deploy.pt-BR.md).
 
 ## Segurança e uso responsável
 
@@ -228,7 +228,7 @@ real.
 `deploy/safebrowse.service` sobe tudo no boot. Na frente vai um túnel ou reverse
 proxy com HTTPS que manda `/remoto/*` para o portão e o resto para o app. O passo
 a passo, com Cloudflare Tunnel + Access ou com Caddy e senha, está em
-[docs/deploy.md](docs/deploy.md).
+[docs/deploy.pt-BR.md](docs/deploy.pt-BR.md).
 
 ## Desenvolvimento
 

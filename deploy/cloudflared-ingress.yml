@@ -1,8 +1,8 @@
-# Trecho para o ingress do cloudflared (ex.: /etc/cloudflared/config.yml), antes do
-# catch-all `- service: http_status:404`. Troque qp.example.com pelo seu hostname e as
-# portas por QP_REMOTE_PORT e QP_PORT do seu .env.
-# A ordem importa: a regra com path vem antes da regra geral do mesmo hostname.
-# Se usar Cloudflare Access, um app só cobre o hostname inteiro (as duas regras).
+# Snippet for the cloudflared ingress (e.g. /etc/cloudflared/config.yml), before the
+# catch-all `- service: http_status:404`. Replace qp.example.com with your hostname and
+# the ports with QP_REMOTE_PORT and QP_PORT from your .env.
+# Order matters: the rule with a path goes before the general rule for the same hostname.
+# With Cloudflare Access, a single app covers the whole hostname (both rules).
   - hostname: qp.example.com
     path: ^/remoto(/|$)
     service: http://localhost:18085
