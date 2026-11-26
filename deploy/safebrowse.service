@@ -1,0 +1,22 @@
+# safebrowse.service — sobe o QP (docker compose prod) no boot do servidor.
+# Ajuste WorkingDirectory para a pasta onde você clonou o repositório.
+#   sudo cp deploy/safebrowse.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now safebrowse
+# Logs: journalctl -u safebrowse -f | sudo docker compose -f docker-compose.prod.yml logs -f
+[Unit]
+Description=SafeBrowse (docker compose prod)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/qp
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml up -d --build
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+ExecReload=/usr/bin/docker compose -f docker-compose.prod.yml up -d --build
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

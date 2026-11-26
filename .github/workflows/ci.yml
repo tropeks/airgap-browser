@@ -1,0 +1,83 @@
+# CI do QP: roda no runner hospedado do GitHub (grátis em repositório público).
+#   testes      ruff + a suíte inteira, com o Chromium do Playwright para os testes do modo renderizado
+#   segredos    gitleaks no histórico do push ou do PR
+#   auditoria   vulnerabilidade conhecida nova nas dependências (uv.lock)
+#   zizmor      workflows seguros
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.32"
+          enable-cache: false
+      - run: uv sync --frozen
+      - run: uv run ruff check app tests
+      - run: uv run ruff format --check app tests
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q
+
+  segredos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks
+        env:
+          GITLEAKS_VERSAO: 8.28.0
+          GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSAO/gitleaks_${GITLEAKS_VERSAO}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --exit-code 1 --no-banner .
+
+  auditoria:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0   # compara o uv.lock do head com o do primeiro pai
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.32"
+          enable-cache: false
+      - name: vulnerabilidade nova nas dependências
+        run: |
+          uv venv -q "$RUNNER_TEMP/aud" && uv pip install -q --python "$RUNNER_TEMP/aud" 'pip-audit==2.10.1'
+          "$RUNNER_TEMP/aud/bin/python" .github/actions/auditoria/auditoria.py
+
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.11.32"
+          enable-cache: false
+      - name: zizmor nos workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uvx --from 'zizmor==1.32.0' zizmor --format plain .github/workflows

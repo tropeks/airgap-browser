@@ -1,0 +1,157 @@
+# Servidor com os três modos (isolado, renderizado e remoto), atrás de um túnel ou
+# reverse proxy com HTTPS. As portas ficam presas em 127.0.0.1: quem publica é o proxy
+# da frente, que manda /remoto/* para QP_REMOTE_PORT e o resto para QP_PORT.
+#   cp .env.example .env && $EDITOR .env
+#   sudo docker compose -f docker-compose.prod.yml up -d --build
+# Passo a passo: docs/deploy.md.
+services:
+  safebrowse:
+    build: .
+    ports:
+      - "127.0.0.1:${QP_PORT:-18082}:8000"
+    environment:
+      # Vazio: sem senha própria (só use assim com algo que autentique na frente,
+      # como o Cloudflare Access). Com senha, o modo remoto pede a mesma.
+      SAFEBROWSE_AUTH_USER: ${SAFEBROWSE_AUTH_USER:-qp}
+      SAFEBROWSE_AUTH_PASSWORD: ${SAFEBROWSE_AUTH_PASSWORD:-}
+      SAFEBROWSE_MAX_BYTES: "5242880"
+      SAFEBROWSE_TIMEOUT: "15"
+      SAFEBROWSE_RATE_LIMIT: "120"
+      # O proxy da frente entrega o IP real em X-Forwarded-For; a porta só aceita localhost.
+      SAFEBROWSE_TRUST_PROXY: "1"
+      # Botão Remoto abre o Chromium com tela (Selkies, serviço "navegador" abaixo).
+      SAFEBROWSE_REMOTE_SCREEN_URL: "/remoto/"
+    restart: unless-stopped
+    read_only: true
+    # Chromium precisa de /tmp gravável (perfil descartável) e /dev/shm generoso.
+    tmpfs:
+      - /tmp:size=1g,exec
+    shm_size: "512m"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ---- Modo remoto com tela -----------------------------------------------------
+  # Chromium completo numa tela virtual, transmitida inteira pelo Selkies (WebSocket).
+  # Pop-ups, FedCM e diálogos do navegador aparecem como num desktop, sem código no QP.
+  # Fica só na rede "isolada" (sem rota para fora): a única saída é o proxy guardado
+  # do QP, e a única entrada é o portão abaixo, atrás do proxy da frente.
+  # Proxy de saída guardado (anti-SSRF, app/egress.py) num contêiner só dele: o
+  # navegador alcança esta porta, mas não o app do QP (que não tem login próprio).
+  saida:
+    build: .
+    command: ["/srv/.venv/bin/python", "-m", "app.egress"]
+    environment:
+      SAFEBROWSE_EGRESS_LISTEN: "0.0.0.0:3128"
+    networks: [default, isolada]
+    healthcheck:
+      test: ["CMD", "/srv/.venv/bin/python", "-c", "import socket; socket.create_connection(('127.0.0.1', 3128), 2).close()"]
+      interval: 30s
+      timeout: 3s
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  navegador:
+    image: lscr.io/linuxserver/chromium:2dba585f-ls60
+    networks: [isolada]
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: ${TZ:-America/Sao_Paulo}
+      LC_ALL: ${QP_REMOTE_LOCALE:-pt_BR.UTF-8}
+      # Mesma senha do app (HTTP Basic no nginx da imagem). Vazia: sem senha.
+      CUSTOM_USER: ${SAFEBROWSE_AUTH_USER:-qp}
+      PASSWORD: ${SAFEBROWSE_AUTH_PASSWORD:-}
+      TITLE: QP remoto
+      SUBFOLDER: /remoto/
+      # A rede interna é só IPv4; sem isso o nginx da imagem falha onde não há IPv6.
+      DISABLE_IPV6: "true"
+      # Baixar arquivos: só no sentido VPS -> você. O que o Chromium salva em
+      # ~/Downloads aparece no painel "Arquivos" do menu lateral do Selkies.
+      # Upload segue desligado. O portão serve esses arquivos com CSP sandbox.
+      SELKIES_FILE_TRANSFERS: download
+      SELKIES_UI_SIDEBAR_SHOW_FILES: "true"
+      FILE_MANAGER_PATH: /config/Downloads
+      # Sem terminal, sudo, upload de arquivos, impressão nem atalhos do desktop;
+      # o Chromium reabre sozinho se for fechado.
+      HARDEN_DESKTOP: "true"
+      HARDEN_OPENBOX: "true"
+      SELKIES_ENABLE_SHARING: "false"
+      SELKIES_ENABLE_SHARED: "false"
+      # A tela remota sempre acompanha o tamanho da janela (e a escala do monitor).
+      # Travado no servidor: uma resolução fixa escolhida no menu lateral ficava
+      # salva no navegador (localStorage) e prendia a tela num tamanho só.
+      SELKIES_MANUAL_RESOLUTION: "false|locked"
+      # <-loopback>: nem localhost escapa do proxy. QUIC/UDP não passam por proxy HTTP.
+      CHROME_CLI: >-
+        --proxy-server=http://saida:3128
+        --proxy-bypass-list=<-loopback>
+        --disable-quic
+        --force-webrtc-ip-handling-policy=disable_non_proxied_udp
+        --disable-background-networking
+        --lang=pt-BR
+        https://www.google.com/
+    # Perfil descartável: some a cada "docker compose up" / restart do contêiner.
+    tmpfs:
+      - /config:size=2g,uid=1000,gid=1000,mode=0700
+    shm_size: "1g"
+    security_opt:
+      - no-new-privileges:true
+    # O s6 da imagem inicia como root e troca para o usuário 1000; só isso fica liberado.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+      - KILL
+    mem_limit: 2g
+    pids_limit: 1024
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Portão: única ponte entre o host (cloudflared) e o navegador isolado.
+  remoto-portao:
+    image: nginx:1.29-alpine
+    user: "101:101"
+    networks: [default, isolada]
+    ports:
+      - "127.0.0.1:${QP_REMOTE_PORT:-18085}:8080"
+    volumes:
+      - ./deploy/remoto/nginx.conf:/etc/nginx/nginx.conf:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on: [navegador]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  # internal: sem gateway para fora. Docker resolve só os nomes dos contêineres.
+  isolada:
+    internal: true

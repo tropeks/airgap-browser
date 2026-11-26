@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>SafeBrowse</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2334d399' d='M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5z'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="bar">
+  <div class="nav">
+    <button id="back" title="Voltar (Alt+←)" aria-label="Voltar">&#8592;</button>
+    <button id="forward" title="Avançar (Alt+→)" aria-label="Avançar">&#8594;</button>
+    <button id="reload" title="Recarregar (F5)" aria-label="Recarregar">&#8635;</button>
+    <button id="home" title="Início" aria-label="Início">&#8962;</button>
+  </div>
+  <div class="modes" role="group" aria-label="Modo">
+    <button id="mode-iso" class="mode active" title="Isolado: HTML sanitizado, sem JavaScript">Isolado</button>
+    <button id="mode-rem" class="mode" title="Remoto: Chromium completo na VPS, só a tela chega aqui (abre em outra página)">Remoto</button>
+  </div>
+  <button id="files-btn" class="filesbtn" type="button" title="Arquivos baixados no Remoto" aria-expanded="false" aria-controls="files" hidden>&#128229; <span class="filesbtn-label">Arquivos</span></button>
+  <form id="urlform" class="urlform" autocomplete="off">
+    <span id="lock" class="lock" title="Página isolada: sem scripts, sem cookies, recursos via proxy">&#128737;</span>
+    <input id="url" type="text" inputmode="url" spellcheck="false" placeholder="Digite uma URL ou domínio" aria-label="Endereço">
+    <button type="submit" id="gobtn">Ir</button>
+  </form>
+  <div class="status" id="status" aria-live="polite"></div>
+</header>
+
+<div id="report" class="report" hidden></div>
+
+<section id="files" class="files" aria-label="Arquivos baixados no Remoto" hidden>
+  <div class="files-head">
+    <span>Baixados no Remoto</span>
+    <span class="files-actions">
+      <button id="files-refresh" type="button">atualizar</button>
+      <button id="files-close" type="button" aria-label="Fechar">&#10005;</button>
+    </span>
+  </div>
+  <p class="files-note">Vieram da internet pelo Chromium remoto: trate como qualquer download não confiável. Somem quando o Remoto reinicia.</p>
+  <p id="files-msg" class="files-msg" hidden></p>
+  <ul id="files-list"></ul>
+</section>
+
+<main class="viewport">
+  <section id="homepanel" class="home">
+    <div class="home-inner">
+      <h1>&#128737; SafeBrowse</h1>
+      <p>Abre qualquer página por um proxy que remove scripts, frames, formulários POST e rastreadores, e renderiza o resultado num sandbox sem acesso a cookies, armazenamento ou rede.</p>
+      <ul class="facts">
+        <li>JavaScript da página nunca chega ao seu navegador</li>
+        <li>Nenhum cookie é enviado ou guardado</li>
+        <li>Imagens, CSS e fontes passam pelo proxy; endereços internos são bloqueados</li>
+        <li>Links e buscas (GET) funcionam; envio de dados (POST) é desativado</li>
+      </ul>
+      <p><strong>Modo Remoto</strong>: para sites que dependem de JavaScript (apps, login, captcha). Um Chromium roda na VPS e só a imagem da tela chega ao seu navegador; mouse e teclado são retransmitidos. Ele não alcança a sua rede nem a da VPS.</p>
+      <div id="recent" class="recent" hidden>
+        <div class="recent-head"><span>Recentes</span><button id="clear-recent" type="button">limpar</button></div>
+        <ul id="recent-list"></ul>
+      </div>
+    </div>
+  </section>
+  <section id="errorpanel" class="error" hidden>
+    <div class="error-inner">
+      <h2 id="error-title">Não foi possível abrir</h2>
+      <p id="error-msg"></p>
+      <p id="error-url" class="mono"></p>
+      <button id="error-retry" type="button">Tentar de novo</button>
+    </div>
+  </section>
+  <div id="loading" class="loading" hidden><div class="spinner"></div></div>
+  <iframe id="frame" title="Página isolada" sandbox="allow-same-origin allow-forms allow-top-navigation-by-user-activation" referrerpolicy="no-referrer" hidden></iframe>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

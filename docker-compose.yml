@@ -1,0 +1,31 @@
+# Uso local: só o modo isolado (e o renderizado), em http://127.0.0.1:8000.
+#   cp .env.example .env   # opcional: senha, limites
+#   docker compose up --build
+# Para um servidor com o modo remoto, veja docker-compose.prod.yml e docs/deploy.md.
+services:
+  safebrowse:
+    build: .
+    ports:
+      # Só localhost por padrão: sem senha, o app é um proxy aberto para quem alcançar a porta.
+      # Para abrir na rede, defina SAFEBROWSE_AUTH_PASSWORD e QP_BIND=0.0.0.0 no .env.
+      - "${QP_BIND:-127.0.0.1}:${QP_PORT:-8000}:8000"
+    environment:
+      SAFEBROWSE_AUTH_USER: ${SAFEBROWSE_AUTH_USER:-qp}
+      SAFEBROWSE_AUTH_PASSWORD: ${SAFEBROWSE_AUTH_PASSWORD:-}
+      SAFEBROWSE_MAX_BYTES: "5242880"
+      SAFEBROWSE_TIMEOUT: "15"
+      SAFEBROWSE_RATE_LIMIT: "120"
+      # Ligue só atrás de um reverse proxy que sobrescreve X-Forwarded-For.
+      SAFEBROWSE_TRUST_PROXY: "0"
+    restart: unless-stopped
+    read_only: true
+    # Chromium precisa de /tmp gravável (perfil descartável) e /dev/shm generoso.
+    tmpfs:
+      - /tmp:size=1g,exec
+    shm_size: "512m"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 1024
